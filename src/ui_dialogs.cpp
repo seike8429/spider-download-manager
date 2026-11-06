@@ -434,6 +434,21 @@ public:
         notificationsLayout->addWidget(showProgress_);
         root->addWidget(notifications);
 
+        auto* startup = new QGroupBox(Tr("Startup"), this);
+        auto* startupLayout = new QVBoxLayout(startup);
+        startWithWindows_ =
+            new QCheckBox(Tr("Start with Windows"), startup);
+        startWithWindows_->setChecked(cfg.startWithWindows);
+        startupLayout->addWidget(startWithWindows_);
+        auto* startupHint = new QLabel(
+            Tr("Starts minimized in the notification area so browser "
+               "downloads are captured."),
+            startup);
+        startupHint->setStyleSheet(QStringLiteral("color:#96a0ae;"));
+        startupHint->setWordWrap(true);
+        startupLayout->addWidget(startupHint);
+        root->addWidget(startup);
+
         auto* info = new QLabel(
             Tr("Settings are stored per user under "
                "HKCU\\Software\\SpiderDownloadManager."),
@@ -478,6 +493,7 @@ public:
 
         cfg_.showCompleteDialog = showComplete_->isChecked();
         cfg_.showProgressDialog = showProgress_->isChecked();
+        cfg_.startWithWindows = startWithWindows_->isChecked();
 
         QDialog::accept();
     }
@@ -503,6 +519,7 @@ private:
     QLineEdit* proxyAddress_ = nullptr;
     QCheckBox* showComplete_ = nullptr;
     QCheckBox* showProgress_ = nullptr;
+    QCheckBox* startWithWindows_ = nullptr;
 };
 
 // ---------------------------------------------------------------------------

@@ -78,16 +78,26 @@ int main(int argc, char** argv) {
 
     DownloadManager& manager = DownloadManager::Instance();
     manager.LoadSettings();
+    // Keep the logon entry in sync with the setting (and repair its path if
+    // the exe moved since the entry was written).
+    ApplyStartWithWindows(manager.Settings().startWithWindows);
     SetCurrentLanguage(manager.Settings().language == 1
                            ? UiLanguage::Arabic
                            : UiLanguage::English);
 
     MainWindow window;
-    window.show();
 
     // A URL on the command line is queued immediately; browsers and other
     // launchers use this path.
     const QStringList arguments = QCoreApplication::arguments();
+    // --tray starts the app in the notification area only (used by the
+    // Start with Windows logon entry). The tray icon is already shown by
+    // the MainWindow constructor, so the app stays alive in the tray.
+    const bool startInTray = arguments.contains(QStringLiteral("--tray")) ||
+                             arguments.contains(QStringLiteral("-tray")) ||
+                             arguments.contains(QStringLiteral("/tray"));
+    if (!startInTray) window.show();
+
     for (int i = 1; i < arguments.size(); ++i) {
         const std::wstring candidate = arguments[i].toStdWString();
         if (ParseUrl(candidate).valid) {

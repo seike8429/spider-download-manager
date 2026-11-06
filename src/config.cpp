@@ -208,6 +208,37 @@ bool MigrateLegacySettings() {
 
 }  // namespace
 
+// HKCU Run entry so the app launches at Windows logon. The entry starts the
+// app with --tray so it sits in the notification area, ready to capture
+// browser downloads (IDM-style). Self-heals the path if the exe moved.
+void ApplyStartWithWindows(bool enable) {
+    const wchar_t* kRunKey =
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+    HKEY key = nullptr;
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, kRunKey, 0, nullptr, 0,
+                        KEY_SET_VALUE, nullptr, &key, nullptr) !=
+        ERROR_SUCCESS) {
+        return;
+    }
+    if (enable) {
+        wchar_t exePath[MAX_PATH] = {};
+        const DWORD len = GetModuleFileNameW(nullptr, exePath, MAX_PATH);
+        if (len == 0) {
+            RegCloseKey(key);
+            return;
+        }
+        std::wstring command = L"\"";
+        command += exePath;
+        command += L"\" --tray";
+        RegSetValueExW(key, APP_NAME, 0, REG_SZ,
+                       reinterpret_cast<const BYTE*>(command.c_str()),
+                       (DWORD)((command.size() + 1) * sizeof(wchar_t)));
+    } else {
+        RegDeleteValueW(key, APP_NAME);
+    }
+    RegCloseKey(key);
+}
+
 void Config::Load() {
     const bool migrated = MigrateLegacySettings();
 
@@ -234,6 +265,8 @@ void Config::Load() {
     minPartSize      = ReadInt(key, L"MinPartSize", minPartSize);
     speedLimitKB     = ReadInt(key, L"SpeedLimitKB", speedLimitKB);
     startOnAdd       = ReadInt(key, L"StartOnAdd", startOnAdd ? 1 : 0) != 0;
+    startWithWindows =
+        ReadInt(key, L"StartWithWindows", startWithWindows ? 1 : 0) != 0;
     showCompleteDialog =
         ReadInt(key, L"ShowCompleteDialog", showCompleteDialog ? 1 : 0) != 0;
     showProgressDialog =
@@ -284,6 +317,7 @@ void Config::Save() const {
     WriteInt(key, L"MinPartSize", minPartSize);
     WriteInt(key, L"SpeedLimitKB", speedLimitKB);
     WriteInt(key, L"StartOnAdd", startOnAdd ? 1 : 0);
+    WriteInt(key, L"StartWithWindows", startWithWindows ? 1 : 0);
     WriteInt(key, L"ShowCompleteDialog", showCompleteDialog ? 1 : 0);
     WriteInt(key, L"ShowProgressDialog", showProgressDialog ? 1 : 0);
     WriteInt(key, L"ProgressShowDetails", progressShowDetails ? 1 : 0);
@@ -297,4 +331,7 @@ void Config::Save() const {
     WriteString(key, L"CustomCategories", EncodeStringList(customCategories));
     WriteString(key, L"RecentSavePaths", EncodeStringList(recentSavePaths));
     RegCloseKey(key);
+
+    // Keep the logon entry in sync with the setting.
+    ApplyStartWithWindows(startWithWindows);
 }

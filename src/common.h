@@ -126,6 +126,7 @@ struct Config {
     int  minPartSize      = 1024 * 1024;   // minimum split unit in bytes
     int  speedLimitKB     = 0;             // 0 = unlimited
     bool startOnAdd       = false;
+    bool startWithWindows = false;   // IDM-style: launch at logon, start in tray
     std::wstring userAgent;
     std::wstring saveDir;
     std::wstring tempDir;
@@ -146,6 +147,12 @@ struct Config {
     void Load();
     void Save() const;
 };
+
+// Writes or removes the HKCU ...\Run entry so the app launches at Windows
+// logon. The entry starts the app with --tray so it sits in the notification
+// area, ready to capture browser downloads (IDM-style). Self-heals the path
+// if the exe moved since the entry was written.
+void ApplyStartWithWindows(bool enable);
 
 // ---------------------------------------------------------------------------
 // http.cpp
