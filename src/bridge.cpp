@@ -695,6 +695,11 @@ void ChromeBridge::StartExtraction(QPointer<QTcpSocket> socket,
         {QStringLiteral("-J"), QStringLiteral("--no-warnings"),
          QStringLiteral("--no-playlist"), QStringLiteral("--skip-download"),
          QStringLiteral("--socket-timeout"), QStringLiteral("20"),
+         // Android player client: YouTube throttles yt-dlp's default web
+         // client and serves JS-challenge formats to it (same as Spider
+         // Browser, which uses this for its fast video downloads).
+         QStringLiteral("--extractor-args"),
+         QStringLiteral("youtube:player_client=android"),
          QStringLiteral("--"), pageUrl});
     timer->start(kExtractTimeoutMs);
     process->start();

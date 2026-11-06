@@ -994,6 +994,10 @@ void DownloadItem::RunYtDlp(Config cfg) {
     }
     args += L"--retries 5 --fragment-retries 5 --socket-timeout 20 "
             L"--concurrent-fragments 4 ";
+    // YouTube throttles yt-dlp's default web client to ~300 KB/s; the
+    // Android player client is not throttled (same as Spider Browser,
+    // which downloads the same videos at high speed).
+    args += L"--extractor-args \"youtube:player_client=android\" ";
     args += L"-o " + QuoteArgument(JoinPath(dir, base + L".%(ext)s")) + L" ";
     args += QuoteArgument(ytDlpPageUrl);
 

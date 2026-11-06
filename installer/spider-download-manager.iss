@@ -10,7 +10,7 @@
 ; Paths are relative to this script's folder (installer/).
 
 #define AppName "Spider Download Manager"
-#define AppVersion "1.2"
+#define AppVersion "1.3"
 #define AppExe "Spider Download Manager.exe"
 
 [Setup]
