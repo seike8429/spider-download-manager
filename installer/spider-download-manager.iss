@@ -10,7 +10,7 @@
 ; Paths are relative to this script's folder (installer/).
 
 #define AppName "Spider Download Manager"
-#define AppVersion "1.3"
+#define AppVersion "1.3.1"
 #define AppExe "Spider Download Manager.exe"
 
 [Setup]
@@ -46,6 +46,11 @@ Source: "..\dist\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs creat
 ; immediately. The app also auto-downloads it on first use (see
 ; InstallYtDlp), so an older install heals itself the same way.
 Source: "..\tools\yt-dlp.exe"; DestDir: "{app}"; Flags: ignoreversion
+; aria2c.exe (v1.3.1): yt-dlp's external downloader for fast YouTube
+; downloads (16 parallel connections, IDM-style). The app also
+; auto-downloads it on first use (see InstallAria2c), so an older install
+; heals itself the same way.
+Source: "..\tools\aria2c.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; The browser extension, so the app can offer a one-click install helper.
 Source: "..\browser-extension\*"; DestDir: "{app}\extension"; Flags: ignoreversion recursesubdirs createallsubdirs
 

@@ -32,6 +32,23 @@ std::wstring YtDlpUrl() {
     return kYtDlpUrl;
 }
 
+// Pinned to aria2 1.37.0 (the version bundled in tools/): the release asset
+// name carries the version, so there is no stable "latest" URL for it.
+const wchar_t* kAria2cUrl =
+    L"https://github.com/aria2/aria2/releases/download/release-1.37.0/"
+    L"aria2-1.37.0-win-64bit-build1.zip";
+
+// SPIDER_ARIA2C_URL lets a mirror (or a local test archive) replace the
+// default. The URL must serve the official aria2 win-64bit zip, which
+// contains aria2c.exe at its top level.
+std::wstring Aria2cUrl() {
+    wchar_t buffer[2048] = {};
+    if (GetEnvironmentVariableW(L"SPIDER_ARIA2C_URL", buffer, 2048) > 0) {
+        return buffer;
+    }
+    return kAria2cUrl;
+}
+
 bool IsFile(const std::wstring& path) {
     const DWORD attrs = GetFileAttributesW(path.c_str());
     return attrs != INVALID_FILE_ATTRIBUTES &&
@@ -173,6 +190,10 @@ std::wstring FindYtDlp() {
 
 std::wstring FindFfmpeg() {
     return FindTool(L"ffmpeg.exe", L"ffmpeg");
+}
+
+std::wstring FindAria2c() {
+    return FindTool(L"aria2c.exe", L"");
 }
 
 // ---------------------------------------------------------------------------
@@ -552,5 +573,131 @@ bool InstallYtDlp(HttpClient& client,
     }
 
     AppendLog(L"yt-dlp installed at " + target);
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// aria2c installer (small zip, one exe inside)
+// ---------------------------------------------------------------------------
+
+bool InstallAria2c(HttpClient& client,
+                   const std::function<void(uint64_t, uint64_t)>& progress,
+                   const std::atomic<bool>& cancel, std::wstring& error) {
+    const std::wstring toolDir = ToolDir();
+    const std::wstring target = toolDir + L"\\aria2c.exe";
+    const std::wstring zipPath = toolDir + L"\\aria2c-download.zip";
+    const std::wstring unpackDir = toolDir + L"\\aria2c-unpack";
+    EnsureDirectory(toolDir);
+
+    RequestOptions head;
+    head.method = L"HEAD";
+    const std::wstring aria2cUrl = Aria2cUrl();
+    const HttpResponse probe =
+        client.Request(aria2cUrl, head, HttpClient::BodySink());
+    const uint64_t total = probe.ok ? probe.contentLength : UINT64_MAX;
+
+    HANDLE file = CreateFileW(zipPath.c_str(), GENERIC_WRITE, 0, nullptr,
+                              CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) {
+        error = L"Cannot create the aria2c archive";
+        return false;
+    }
+
+    uint64_t written = 0;
+    bool writeOk = true;
+    RequestOptions get;
+    const HttpResponse response = client.Request(
+        aria2cUrl, get, [&](int, const uint8_t* data, size_t len) -> bool {
+            if (cancel.load()) return false;
+            DWORD wrote = 0;
+            if (!WriteFile(file, data, (DWORD)len, &wrote, nullptr) ||
+                wrote != len) {
+                writeOk = false;
+                return false;
+            }
+            written += wrote;
+            if (progress) progress(written, total == UINT64_MAX ? 0 : total);
+            return true;
+        });
+    CloseHandle(file);
+
+    // The official win-64bit zip is ~2.4 MB; anything much smaller is an
+    // error page, not the archive.
+    if (!writeOk || response.statusCode != 200 ||
+        written < 1ull * 1024ull * 1024ull) {
+        AppendLog(L"aria2c download failed: status " +
+                  std::to_wstring(response.statusCode) + L", bytes " +
+                  std::to_wstring(written));
+        DeleteFileQuiet(zipPath);
+        error = cancel.load() ? L"Stopped" : L"Cannot download aria2c";
+        return false;
+    }
+
+    if (progress) progress(0, 0);
+
+    // Windows ships bsdtar, which understands zip archives. It is the only
+    // unpacker available without adding a compression library.
+    EnsureDirectory(unpackDir);
+    std::string output;
+    int code = -1;
+    const std::wstring tarArgs =
+        L"-xf " + Quote(zipPath) + L" -C " + Quote(unpackDir);
+    if (!RunToolCapture(L"tar.exe", tarArgs, 120000, output, code) || code != 0) {
+        AppendLog(L"tar failed (code " + std::to_wstring(code) + L"): " +
+                  Utf8ToWide(output));
+        error = L"Cannot unpack the aria2c archive";
+        DeleteFileQuiet(zipPath);
+        return false;
+    }
+
+    std::wstring found;
+    if (!FindFileRecursive(unpackDir, L"aria2c.exe", 0, found)) {
+        AppendLog(L"aria2c.exe missing from " + unpackDir +
+                  L"; tar output: " + Utf8ToWide(output));
+        error = L"The aria2c archive did not contain aria2c.exe";
+        DeleteFileQuiet(zipPath);
+        return false;
+    }
+
+    // A real aria2c.exe is a Windows PE; a GitHub error page or a captive
+    // portal would come back as HTML. Refuse anything that is not an exe.
+    HANDLE check = CreateFileW(found.c_str(), GENERIC_READ, FILE_SHARE_READ,
+                               nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL,
+                               nullptr);
+    if (check == INVALID_HANDLE_VALUE) {
+        error = L"Cannot verify the aria2c download";
+        DeleteFileQuiet(zipPath);
+        return false;
+    }
+    char header[2] = {};
+    DWORD read = 0;
+    const bool headerOk =
+        ReadFile(check, header, sizeof(header), &read, nullptr) &&
+        read == sizeof(header) && header[0] == 'M' && header[1] == 'Z';
+    LARGE_INTEGER size = {};
+    const bool sizeOk =
+        GetFileSizeEx(check, &size) && size.QuadPart > 1ll * 1024ll * 1024ll;
+    CloseHandle(check);
+    if (!headerOk || !sizeOk) {
+        AppendLog(L"aria2c download is not a valid Windows executable");
+        DeleteFileQuiet(zipPath);
+        error = L"The aria2c download is not a valid executable";
+        return false;
+    }
+
+    const std::wstring destination = target;
+    DeleteFileQuiet(destination);
+    if (!CopyFileW(found.c_str(), destination.c_str(), FALSE)) {
+        error = L"Cannot install aria2c.exe: " + GetErrorMessage(GetLastError());
+        DeleteFileQuiet(zipPath);
+        return false;
+    }
+
+    DeleteFileQuiet(zipPath);
+    std::string ignored;
+    int ignoredCode = 0;
+    RunToolCapture(L"cmd.exe", L"/c rmdir /s /q " + Quote(unpackDir), 60000,
+                   ignored, ignoredCode);
+    AppendLog(L"aria2c installed at " + destination);
     return true;
 }

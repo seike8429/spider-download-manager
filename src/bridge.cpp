@@ -691,15 +691,17 @@ void ChromeBridge::StartExtraction(QPointer<QTcpSocket> socket,
 
     process->setProgram(QString::fromStdWString(tool));
     process->setProcessChannelMode(QProcess::SeparateChannels);
+    // NOTE (v1.3.1): do NOT add "youtube:player_client=android" here.
+    // v1.3 did, and it broke the quality menu: the Android player client
+    // returns only the 360p progressive format (format 18) in the metadata
+    // dump, so the extension saw a single quality and never showed the
+    // menu. The default web client returns the full format list (144p to
+    // 2160p). Download speed is fixed separately with aria2c, not by
+    // changing the player client.
     process->setArguments(
         {QStringLiteral("-J"), QStringLiteral("--no-warnings"),
          QStringLiteral("--no-playlist"), QStringLiteral("--skip-download"),
          QStringLiteral("--socket-timeout"), QStringLiteral("20"),
-         // Android player client: YouTube throttles yt-dlp's default web
-         // client and serves JS-challenge formats to it (same as Spider
-         // Browser, which uses this for its fast video downloads).
-         QStringLiteral("--extractor-args"),
-         QStringLiteral("youtube:player_client=android"),
          QStringLiteral("--"), pageUrl});
     timer->start(kExtractTimeoutMs);
     process->start();

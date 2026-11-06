@@ -866,6 +866,40 @@ uint64_t ParseCount(const std::string& text) {
     return value;
 }
 
+// aria2c prints human sizes ("688KiB", "1.5MiB", "77MiB", "0B") in its
+// console readout; ParseCount can't handle those (it reads only the
+// leading integer and ignores the unit). Convert to bytes.
+uint64_t ParseAriaSize(const std::string& text) {
+    size_t i = 0;
+    while (i < text.size() && text[i] == ' ') ++i;
+    double value = 0;
+    bool any = false;
+    while (i < text.size() && text[i] >= '0' && text[i] <= '9') {
+        value = value * 10 + (double)(text[i] - '0');
+        ++i;
+        any = true;
+    }
+    if (i < text.size() && text[i] == '.') {
+        ++i;
+        double frac = 0.1;
+        while (i < text.size() && text[i] >= '0' && text[i] <= '9') {
+            value += (double)(text[i] - '0') * frac;
+            frac *= 0.1;
+            ++i;
+            any = true;
+        }
+    }
+    if (!any) return 0;
+    uint64_t mult = 1;
+    if (i + 1 < text.size()) {
+        if (text[i] == 'K') mult = 1024ULL;
+        else if (text[i] == 'M') mult = 1024ULL * 1024ULL;
+        else if (text[i] == 'G') mult = 1024ULL * 1024ULL * 1024ULL;
+        else if (text[i] == 'T') mult = 1024ULL * 1024ULL * 1024ULL * 1024ULL;
+    }
+    return (uint64_t)(value * (double)mult);
+}
+
 }  // namespace
 
 void DownloadItem::RunYtDlp(Config cfg) {
@@ -965,6 +999,45 @@ void DownloadItem::RunYtDlp(Config cfg) {
         }
     }
 
+    std::wstring aria2c = FindAria2c();
+    if (aria2c.empty()) {
+        // v1.3.1: fetch it once so this and future video downloads are
+        // fast. A failed fetch must NOT block this download: yt-dlp's
+        // built-in downloader still works, just slower (the YouTube
+        // throttling v1.3 tried to dodge with the Android player client,
+        // which only serves 360p and broke the quality menu).
+        HttpClient client;
+        if (client.Open(cfg)) {
+            AttachClient(client);
+            ScopeExit detach{ [this, &client] { DetachClient(client); } };
+
+            std::wstring installError;
+            if (InstallAria2c(
+                    client,
+                    [this](uint64_t done, uint64_t total) {
+                        totalBytes.store(total);
+                        downloadedBytes.store(done);
+                        UpdateProgress();
+                    },
+                    stopRequested_, installError)) {
+                aria2c = FindAria2c();
+            }
+            // Install failed (offline, bad archive, ...): aria2c stays
+            // empty and the download below runs without it.
+        }
+
+        if (stopRequested_.load()) {
+            state.store((int)DownloadState::Paused);
+            UpdateProgress();
+            return;
+        }
+        // Install failed (offline, bad archive, ...): continue without
+        // aria2c. downloadedBytes/totalBytes were showing the installer
+        // progress; reset them for the real download below.
+        downloadedBytes.store(0);
+        totalBytes.store(0);
+    }
+
     const std::wstring target = GetSavePath();
     const std::wstring dir = DirName(target);
     EnsureDirectory(dir);
@@ -994,10 +1067,19 @@ void DownloadItem::RunYtDlp(Config cfg) {
     }
     args += L"--retries 5 --fragment-retries 5 --socket-timeout 20 "
             L"--concurrent-fragments 4 ";
-    // YouTube throttles yt-dlp's default web client to ~300 KB/s; the
-    // Android player client is not throttled (same as Spider Browser,
-    // which downloads the same videos at high speed).
-    args += L"--extractor-args \"youtube:player_client=android\" ";
+    // v1.3.1: IDM-style speed. yt-dlp (default web client, full format
+    // list) resolves the direct URL and aria2c downloads it with 16
+    // parallel connections. yt-dlp accepts the downloader as a full path
+    // ("Name or path of the external downloader"), so no PATH juggling is
+    // needed. Without aria2c the built-in downloader runs instead.
+    // Do NOT use "youtube:player_client=android" here: v1.3 proved the
+    // Android client only serves the 360p progressive format, so it broke
+    // the quality menu and could not download 1080p at all.
+    if (!aria2c.empty()) {
+        args += L"--downloader " + QuoteArgument(aria2c) + L" ";
+        args += L"--downloader-args " +
+                QuoteArgument(L"aria2c:-x 16 -s 16 -k 1M") + L" ";
+    }
     args += L"-o " + QuoteArgument(JoinPath(dir, base + L".%(ext)s")) + L" ";
     args += QuoteArgument(ytDlpPageUrl);
 
@@ -1030,6 +1112,33 @@ void DownloadItem::RunYtDlp(Config cfg) {
         }
 
         // Progress/report lines are noisy; only keep the tail for errors.
+        // aria2c (v1.3.1 external downloader) prints its own progress
+        // lines, roughly once a second:
+        //   [#8f974b 68MiB/77MiB(88%) CN:10 DL:6.6MiB ETA:1s]
+        // yt-dlp only forwards its --progress-template at the end of each
+        // file when an external downloader runs, so without these the bar
+        // would sit at 0% until the file finishes. Parse them the same way
+        // as the dl: lines; keep them out of the error tail.
+        if (line.rfind("[#", 0) == 0) {
+            const size_t slash = line.find('/');
+            const size_t paren = slash == std::string::npos
+                                     ? std::string::npos
+                                     : line.find('(', slash);
+            if (slash != std::string::npos && paren != std::string::npos) {
+                const size_t space = line.find(' ');
+                if (space != std::string::npos && space < slash) {
+                    const uint64_t done = ParseAriaSize(
+                        line.substr(space + 1, slash - space - 1));
+                    const uint64_t total = ParseAriaSize(
+                        line.substr(slash + 1, paren - slash - 1));
+                    if (done > 0) downloadedBytes.store(done);
+                    if (total > 0) totalBytes.store(total);
+                    UpdateProgress();
+                }
+            }
+            return;
+        }
+
         if (line.rfind("[download] ", 0) == 0 &&
             line.find("Destination") != std::string::npos) {
             return;
