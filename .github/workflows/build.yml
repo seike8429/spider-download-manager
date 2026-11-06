@@ -23,6 +23,10 @@
 #     platforms/qwindows.dll plugin and the MSVC runtime (via windeployqt
 #     --compiler-runtime). The folder is self-contained: copy it to a Windows
 #     PC and run the exe, no Qt install needed.
+#   - Artifact "SpiderDownloadManager-Setup-1.1": a Setup.exe built with
+#     Inno Setup (installer/spider-download-manager.iss) that installs the
+#     app per-user (no admin) with Start-menu/desktop shortcuts, and
+#     bundles the browser extension next to the exe.
 name: Build Spider Download Manager
 
 on:
@@ -71,6 +75,22 @@ jobs:
             Where-Object { $_.Name -ne 'CMakeFiles' } |
             ForEach-Object { Copy-Item $_.FullName dist\ -Recurse }
           Get-ChildItem dist -Recurse | Select-Object FullName
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y
+
+      - name: Build the installer (Setup.exe)
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\spider-download-manager.iss
+          Get-ChildItem installer\installer-out -Recurse | Select-Object FullName
+
+      - name: Upload Spider Download Manager installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: SpiderDownloadManager-Setup-1.1
+          path: installer/installer-out/SpiderDownloadManager-Setup-1.1.exe
 
       - name: Upload Spider Download Manager
         uses: actions/upload-artifact@v4
