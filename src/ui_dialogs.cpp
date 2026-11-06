@@ -449,6 +449,48 @@ public:
         startupLayout->addWidget(startupHint);
         root->addWidget(startup);
 
+        // IDM-style browser integration: which browsers the extension may
+        // capture downloads from, and clipboard auto-download.
+        auto* browsers = new QGroupBox(Tr("Browser integration"), this);
+        auto* browsersLayout = new QVBoxLayout(browsers);
+        auto* browsersLabel = new QLabel(
+            Tr("Capture downloads from the following browsers:"), browsers);
+        browsersLayout->addWidget(browsersLabel);
+
+        captureChrome_ =
+            new QCheckBox(Tr("Google Chrome"), browsers);
+        captureChrome_->setChecked(cfg.captureChrome);
+        browsersLayout->addWidget(captureChrome_);
+
+        captureEdge_ =
+            new QCheckBox(Tr("Microsoft Edge"), browsers);
+        captureEdge_->setChecked(cfg.captureEdge);
+        browsersLayout->addWidget(captureEdge_);
+
+        captureOpera_ = new QCheckBox(Tr("Opera"), browsers);
+        captureOpera_->setChecked(cfg.captureOpera);
+        browsersLayout->addWidget(captureOpera_);
+
+        captureBrave_ = new QCheckBox(Tr("Brave"), browsers);
+        captureBrave_->setChecked(cfg.captureBrave);
+        browsersLayout->addWidget(captureBrave_);
+
+        clipboardAutoDownload_ = new QCheckBox(
+            Tr("Automatically start downloading of URLs placed to "
+               "clipboard"),
+            browsers);
+        clipboardAutoDownload_->setChecked(cfg.clipboardAutoDownload);
+        browsersLayout->addWidget(clipboardAutoDownload_);
+
+        auto* browsersHint = new QLabel(
+            Tr("The Spider extension must be installed in a browser for it "
+               "to capture downloads. Firefox is not supported yet."),
+            browsers);
+        browsersHint->setStyleSheet(QStringLiteral("color:#96a0ae;"));
+        browsersHint->setWordWrap(true);
+        browsersLayout->addWidget(browsersHint);
+        root->addWidget(browsers);
+
         auto* info = new QLabel(
             Tr("Settings are stored per user under "
                "HKCU\\Software\\SpiderDownloadManager."),
@@ -494,6 +536,11 @@ public:
         cfg_.showCompleteDialog = showComplete_->isChecked();
         cfg_.showProgressDialog = showProgress_->isChecked();
         cfg_.startWithWindows = startWithWindows_->isChecked();
+        cfg_.captureChrome = captureChrome_->isChecked();
+        cfg_.captureEdge = captureEdge_->isChecked();
+        cfg_.captureOpera = captureOpera_->isChecked();
+        cfg_.captureBrave = captureBrave_->isChecked();
+        cfg_.clipboardAutoDownload = clipboardAutoDownload_->isChecked();
 
         QDialog::accept();
     }
@@ -520,6 +567,11 @@ private:
     QCheckBox* showComplete_ = nullptr;
     QCheckBox* showProgress_ = nullptr;
     QCheckBox* startWithWindows_ = nullptr;
+    QCheckBox* captureChrome_ = nullptr;
+    QCheckBox* captureEdge_ = nullptr;
+    QCheckBox* captureOpera_ = nullptr;
+    QCheckBox* captureBrave_ = nullptr;
+    QCheckBox* clipboardAutoDownload_ = nullptr;
 };
 
 // ---------------------------------------------------------------------------

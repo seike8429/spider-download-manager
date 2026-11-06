@@ -559,6 +559,32 @@ void ChromeBridge::acceptConnections() {
                 return;
             }
 
+            // IDM-style per-browser capture: the extension reports which
+            // browser it runs in. If capture is off for that browser, the
+            // download stays in the browser (the extension treats ok:false
+            // like the app being offline). No "browser" field means an
+            // explicit user action (context menu / media panel) or an older
+            // extension, which is always accepted.
+            const QString browser = object.value("browser").toString();
+            if (!browser.isEmpty()) {
+                const Config& cfg = DownloadManager::Instance().Settings();
+                bool allowed = true;
+                if (browser == QStringLiteral("chrome")) {
+                    allowed = cfg.captureChrome;
+                } else if (browser == QStringLiteral("edge")) {
+                    allowed = cfg.captureEdge;
+                } else if (browser == QStringLiteral("opera")) {
+                    allowed = cfg.captureOpera;
+                } else if (browser == QStringLiteral("brave")) {
+                    allowed = cfg.captureBrave;
+                }
+                if (!allowed) {
+                    SendResponse(socket, 200,
+                                 "{\"ok\":false,\"error\":\"browser-disabled\"}");
+                    return;
+                }
+            }
+
             ChromeDownloadRequest download;
             download.url = object.value("url").toString().toStdWString();
             download.fileName =

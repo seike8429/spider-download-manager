@@ -816,6 +816,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(timer, &QTimer::timeout, this, [this] { refresh(false); });
     timer->start();
 
+    // IDM-style clipboard monitoring: when a URL is copied and the setting
+    // is on, the download starts automatically.
+    connect(QApplication::clipboard(), &QClipboard::dataChanged, this,
+            [this] { onClipboardChanged(); });
+
     refresh(true);
 }
 
@@ -2194,6 +2199,26 @@ void MainWindow::addUrlFromText(const std::wstring& url, bool notify,
     selectId(item->id);
     if (starting && cfg.showProgressDialog) {
         ShowDownloadProgressQt(this, item);
+    }
+}
+
+void MainWindow::onClipboardChanged() {
+    const Config& cfg = DownloadManager::Instance().Settings();
+    if (!cfg.clipboardAutoDownload) return;
+    const QString text = QApplication::clipboard()->text();
+    if (text.trimmed().isEmpty()) return;
+    const QStringList lines = text.split(QRegularExpression(
+        QStringLiteral("[\\r\\n]+")), Qt::SkipEmptyParts);
+    for (const QString& line : lines) {
+        const QString candidate = line.trimmed();
+        if (!ParseUrl(ToW(candidate)).valid) continue;
+        // Skip a URL already auto-added from the clipboard, so re-copying
+        // the same link does not queue it twice. Ctrl+V still adds it.
+        if (candidate == lastAutoClipboardUrl_) return;
+        lastAutoClipboardUrl_ = candidate;
+        // Start right away, like IDM. Quiet: no "clipboard empty" popup.
+        addUrlFromText(ToW(candidate), false, true);
+        return;
     }
 }
 

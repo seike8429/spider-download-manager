@@ -127,6 +127,14 @@ struct Config {
     int  speedLimitKB     = 0;             // 0 = unlimited
     bool startOnAdd       = false;
     bool startWithWindows = false;   // IDM-style: launch at logon, start in tray
+    // IDM-style per-browser capture: the extension reports which browser it
+    // runs in and the bridge only takes the download when capture is on for
+    // that browser. Firefox has no Spider extension yet, so it is not listed.
+    bool captureChrome = true;
+    bool captureEdge = true;
+    bool captureOpera = true;
+    bool captureBrave = true;
+    bool clipboardAutoDownload = false;  // IDM-style: auto-download copied URLs
     std::wstring userAgent;
     std::wstring saveDir;
     std::wstring tempDir;

@@ -534,6 +534,20 @@ function resumeDownload(id) {
   }
 }
 
+// Which browser this extension runs in, for the desktop app's per-browser
+// capture list (IDM-style). Chromium browsers share this extension; the
+// desktop app decides per browser whether to take the download. The check
+// order matters: Edge and Opera also report a Chrome user agent.
+function detectBrowser() {
+  const ua = (navigator.userAgent || "").toLowerCase();
+  if (ua.includes("edg/")) return "edge";
+  if (ua.includes("opr/")) return "opera";
+  if (ua.includes("brave") || navigator.brave) return "brave";
+  if (ua.includes("chrome/")) return "chrome";
+  return "other";
+}
+const BROWSER = detectBrowser();
+
 function payloadFor(item) {
   const url = item.finalUrl || item.url || "";
   const fileName = baseName(item.filename) || fileNameFromUrl(url);
@@ -544,7 +558,8 @@ function payloadFor(item) {
     mime: item.mime || "",
     totalBytes: Number(item.totalBytes) > 0 ? Number(item.totalBytes) : 0,
     description: item.referrer || "",
-    category: inferCategory(fileName, item.mime || "")
+    category: inferCategory(fileName, item.mime || ""),
+    browser: BROWSER
   };
 }
 

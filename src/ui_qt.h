@@ -114,6 +114,7 @@ private:
     void restoreFromTray();
     void enqueueChromeDownload(ChromeDownloadRequest request);
     void showNextChromeDownload();
+    void onClipboardChanged();
     void detectCompletedDownloads(
         const std::vector<std::shared_ptr<DownloadItem>>& items);
     void showNextDownloadComplete();
@@ -171,6 +172,7 @@ private:
     SortMode sort_ = SortMode::AdditionOrder;
     std::unique_ptr<ChromeBridge> bridge_;
     std::deque<ChromeDownloadRequest> chromeQueue_;
+    QString lastAutoClipboardUrl_;
     std::deque<std::shared_ptr<DownloadItem>> completeQueue_;
     std::set<uint64_t> announcedComplete_;
     bool chromeDialogOpen_ = false;

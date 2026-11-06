@@ -267,6 +267,17 @@ void Config::Load() {
     startOnAdd       = ReadInt(key, L"StartOnAdd", startOnAdd ? 1 : 0) != 0;
     startWithWindows =
         ReadInt(key, L"StartWithWindows", startWithWindows ? 1 : 0) != 0;
+    captureChrome =
+        ReadInt(key, L"CaptureChrome", captureChrome ? 1 : 0) != 0;
+    captureEdge =
+        ReadInt(key, L"CaptureEdge", captureEdge ? 1 : 0) != 0;
+    captureOpera =
+        ReadInt(key, L"CaptureOpera", captureOpera ? 1 : 0) != 0;
+    captureBrave =
+        ReadInt(key, L"CaptureBrave", captureBrave ? 1 : 0) != 0;
+    clipboardAutoDownload =
+        ReadInt(key, L"ClipboardAutoDownload",
+                clipboardAutoDownload ? 1 : 0) != 0;
     showCompleteDialog =
         ReadInt(key, L"ShowCompleteDialog", showCompleteDialog ? 1 : 0) != 0;
     showProgressDialog =
@@ -318,6 +329,11 @@ void Config::Save() const {
     WriteInt(key, L"SpeedLimitKB", speedLimitKB);
     WriteInt(key, L"StartOnAdd", startOnAdd ? 1 : 0);
     WriteInt(key, L"StartWithWindows", startWithWindows ? 1 : 0);
+    WriteInt(key, L"CaptureChrome", captureChrome ? 1 : 0);
+    WriteInt(key, L"CaptureEdge", captureEdge ? 1 : 0);
+    WriteInt(key, L"CaptureOpera", captureOpera ? 1 : 0);
+    WriteInt(key, L"CaptureBrave", captureBrave ? 1 : 0);
+    WriteInt(key, L"ClipboardAutoDownload", clipboardAutoDownload ? 1 : 0);
     WriteInt(key, L"ShowCompleteDialog", showCompleteDialog ? 1 : 0);
     WriteInt(key, L"ShowProgressDialog", showProgressDialog ? 1 : 0);
     WriteInt(key, L"ProgressShowDetails", progressShowDetails ? 1 : 0);
