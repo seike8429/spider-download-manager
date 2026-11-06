@@ -869,13 +869,53 @@ uint64_t ParseCount(const std::string& text) {
 }  // namespace
 
 void DownloadItem::RunYtDlp(Config cfg) {
-    const std::wstring tool = FindYtDlp();
+    std::wstring tool = FindYtDlp();
     if (tool.empty()) {
-        SetError(L"yt-dlp.exe was not found. Put it next to the app or in its "
-                 L"tools folder, then retry.");
-        state.store((int)DownloadState::Error);
-        UpdateProgress();
-        return;
+        // v1.2: yt-dlp used to be a manual install, so a fresh setup had no
+        // way to fetch video qualities at all. Fetch it once (same pattern
+        // as the ffmpeg install below), then it stays in the per-user tool
+        // folder.
+        HttpClient client;
+        if (!client.Open(cfg)) {
+            SetError(L"Cannot initialize the HTTP session");
+            state.store((int)DownloadState::Error);
+            UpdateProgress();
+            return;
+        }
+
+        AttachClient(client);
+        ScopeExit detach{ [this, &client] { DetachClient(client); } };
+
+        std::wstring installError;
+        const bool installed = InstallYtDlp(
+            client,
+            [this](uint64_t done, uint64_t total) {
+                totalBytes.store(total);
+                downloadedBytes.store(done);
+                UpdateProgress();
+            },
+            stopRequested_, installError);
+
+        if (stopRequested_.load()) {
+            state.store((int)DownloadState::Paused);
+            UpdateProgress();
+            return;
+        }
+        if (!installed) {
+            SetError(installError.empty() ? L"Cannot download yt-dlp"
+                                          : installError);
+            state.store((int)DownloadState::Error);
+            UpdateProgress();
+            return;
+        }
+
+        tool = FindYtDlp();
+        if (tool.empty()) {
+            SetError(L"yt-dlp was installed but cannot be located");
+            state.store((int)DownloadState::Error);
+            UpdateProgress();
+            return;
+        }
     }
 
     std::wstring ffmpeg = FindFfmpeg();

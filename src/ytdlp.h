@@ -27,6 +27,16 @@ bool InstallFfmpeg(HttpClient& client,
                    const std::function<void(uint64_t, uint64_t)>& progress,
                    const std::atomic<bool>& cancel, std::wstring& error);
 
+// Downloads the single-file yt-dlp.exe release straight into ToolDir().
+// yt-dlp ships as one exe (no archive), so there is nothing to unpack: the
+// download goes to a temporary name, is checked to be a real PE (MZ header,
+// larger than 5 MB), and only then is moved into place, so a failed or
+// half-written download can never be picked up by FindYtDlp(). The caller
+// opens (and may abort) the HTTP client. progress works like InstallFfmpeg.
+bool InstallYtDlp(HttpClient& client,
+                  const std::function<void(uint64_t, uint64_t)>& progress,
+                  const std::atomic<bool>& cancel, std::wstring& error);
+
 // A child process with stdout/stderr merged into one pipe. Pump() polls the
 // pipe in short slices so a cancel request is honoured even when the child is
 // silent (merging, network stalls).

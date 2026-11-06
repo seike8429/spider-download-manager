@@ -38,6 +38,11 @@ public:
 private:
     void acceptConnections();
 
+    // Runs yt-dlp -J for the page and replies with the compact quality
+    // list (or an error) from the process callbacks. The socket is held
+    // by QPointer, so a client that went away simply gets no reply.
+    void StartExtraction(QPointer<QTcpSocket> socket, const QString& pageUrl);
+
     QTcpServer* server_ = nullptr;
     std::function<void(ChromeDownloadRequest)> handler_;
     quint16 port_ = 0;

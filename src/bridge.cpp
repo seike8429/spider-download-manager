@@ -9,6 +9,7 @@
 #include <QJsonParseError>
 #include <QJsonValue>
 #include <QMap>
+#include <QMetaObject>
 #include <QPointer>
 #include <QProcess>
 #include <QTcpServer>
@@ -17,12 +18,19 @@
 
 #include <algorithm>
 #include <memory>
+#include <mutex>
+#include <thread>
 #include <vector>
 
 namespace {
 
 constexpr int kMaxRequestBytes = 256 * 1024;
 constexpr int kExtractTimeoutMs = 45000;
+
+// Serializes yt-dlp installs: several tabs can ask for qualities at once,
+// but the ~23 MB download must only run once. Later callers block on the
+// mutex, then find the tool already installed.
+std::mutex g_ytDlpInstallMutex;
 
 QByteArray JsonError(const char* reason) {
     QJsonObject object;
@@ -507,55 +515,51 @@ void ChromeBridge::acceptConnections() {
                     return;
                 }
 
-                const std::wstring tool = FindYtDlp();
+                std::wstring tool = FindYtDlp();
                 if (tool.empty()) {
-                    SendResponse(socket, 200, JsonError("no-yt-dlp"));
+                    // v1.2: a fresh install has no yt-dlp yet, so asking for
+                    // qualities used to fail outright ("no-yt-dlp"). Fetch
+                    // it now instead. The ~23 MB download runs in a worker
+                    // thread — the socket thread must never block on it —
+                    // and the result is posted back to this (GUI) thread,
+                    // which is the only one allowed to touch the socket.
+                    QPointer<QTcpSocket> target(socket);
+                    QPointer<ChromeBridge> self(this);
+                    const Config cfg =
+                        DownloadManager::Instance().Settings();
+                    std::thread([self, target, pageUrl, cfg] {
+                        {
+                            std::lock_guard<std::mutex> lock(
+                                g_ytDlpInstallMutex);
+                            if (FindYtDlp().empty()) {
+                                HttpClient client;
+                                std::atomic<bool> never{ false };
+                                std::wstring error;
+                                if (client.Open(cfg)) {
+                                    InstallYtDlp(client, nullptr, never,
+                                                 error);
+                                }
+                            }
+                        }
+                        if (!self) return;
+                        const std::wstring installed = FindYtDlp();
+                        QMetaObject::invokeMethod(
+                            self.data(),
+                            [self, target, pageUrl, installed] {
+                                if (!self || !target) return;
+                                if (installed.empty()) {
+                                    SendResponse(target.data(), 200,
+                                                 JsonError("no-yt-dlp"));
+                                    return;
+                                }
+                                self->StartExtraction(target, pageUrl);
+                            },
+                            Qt::QueuedConnection);
+                    }).detach();
                     return;
                 }
 
-                QPointer<QTcpSocket> target(socket);
-                auto* process = new QProcess(this);
-                auto* timer = new QTimer(process);
-                auto finished = std::make_shared<bool>(false);
-                timer->setSingleShot(true);
-
-                auto reply = [target, process, timer, finished](
-                                 const QByteArray& body) {
-                    if (*finished) return;
-                    *finished = true;
-                    timer->stop();
-                    if (target) SendResponse(target.data(), 200, body);
-                    process->deleteLater();
-                };
-
-                connect(process, &QProcess::finished, this,
-                        [process, reply](int code, QProcess::ExitStatus status) {
-                            if (status != QProcess::NormalExit || code != 0) {
-                                reply(JsonError("extract"));
-                                return;
-                            }
-                            reply(BuildExtraction(
-                                process->readAllStandardOutput()));
-                        });
-                connect(process, &QProcess::errorOccurred, this,
-                        [reply](QProcess::ProcessError) {
-                            reply(JsonError("extract"));
-                        });
-                connect(timer, &QTimer::timeout, this, [process, reply] {
-                    process->kill();
-                    reply(JsonError("timeout"));
-                });
-
-                process->setProgram(QString::fromStdWString(tool));
-                process->setProcessChannelMode(QProcess::SeparateChannels);
-                process->setArguments(
-                    {QStringLiteral("-J"), QStringLiteral("--no-warnings"),
-                     QStringLiteral("--no-playlist"),
-                     QStringLiteral("--skip-download"),
-                     QStringLiteral("--socket-timeout"),
-                     QStringLiteral("20"), QStringLiteral("--"), pageUrl});
-                timer->start(kExtractTimeoutMs);
-                process->start();
+                StartExtraction(QPointer<QTcpSocket>(socket), pageUrl);
                 return;
             }
 
@@ -644,4 +648,54 @@ void ChromeBridge::acceptConnections() {
         connect(socket, &QTcpSocket::disconnected, socket,
                 &QObject::deleteLater);
     }
+}
+
+void ChromeBridge::StartExtraction(QPointer<QTcpSocket> socket,
+                                   const QString& pageUrl) {
+    const std::wstring tool = FindYtDlp();
+    if (tool.empty()) {
+        if (socket) SendResponse(socket.data(), 200, JsonError("no-yt-dlp"));
+        return;
+    }
+
+    // yt-dlp can take several seconds, so the reply is sent from the
+    // process callbacks instead of blocking the socket handler.
+    QPointer<QTcpSocket> target(socket);
+    auto* process = new QProcess(this);
+    auto* timer = new QTimer(process);
+    auto finished = std::make_shared<bool>(false);
+    timer->setSingleShot(true);
+
+    auto reply = [target, process, timer, finished](const QByteArray& body) {
+        if (*finished) return;
+        *finished = true;
+        timer->stop();
+        if (target) SendResponse(target.data(), 200, body);
+        process->deleteLater();
+    };
+
+    connect(process, &QProcess::finished, this,
+            [process, reply](int code, QProcess::ExitStatus status) {
+                if (status != QProcess::NormalExit || code != 0) {
+                    reply(JsonError("extract"));
+                    return;
+                }
+                reply(BuildExtraction(process->readAllStandardOutput()));
+            });
+    connect(process, &QProcess::errorOccurred, this,
+            [reply](QProcess::ProcessError) { reply(JsonError("extract")); });
+    connect(timer, &QTimer::timeout, this, [process, reply] {
+        process->kill();
+        reply(JsonError("timeout"));
+    });
+
+    process->setProgram(QString::fromStdWString(tool));
+    process->setProcessChannelMode(QProcess::SeparateChannels);
+    process->setArguments(
+        {QStringLiteral("-J"), QStringLiteral("--no-warnings"),
+         QStringLiteral("--no-playlist"), QStringLiteral("--skip-download"),
+         QStringLiteral("--socket-timeout"), QStringLiteral("20"),
+         QStringLiteral("--"), pageUrl});
+    timer->start(kExtractTimeoutMs);
+    process->start();
 }

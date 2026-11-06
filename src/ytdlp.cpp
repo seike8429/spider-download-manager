@@ -19,6 +19,19 @@ std::wstring FfmpegUrl() {
     return kFfmpegUrl;
 }
 
+const wchar_t* kYtDlpUrl =
+    L"https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe";
+
+// SPIDER_YTDLP_URL lets a mirror (or a local test exe) replace the default.
+// The URL must serve the plain yt-dlp.exe, not an archive.
+std::wstring YtDlpUrl() {
+    wchar_t buffer[2048] = {};
+    if (GetEnvironmentVariableW(L"SPIDER_YTDLP_URL", buffer, 2048) > 0) {
+        return buffer;
+    }
+    return kYtDlpUrl;
+}
+
 bool IsFile(const std::wstring& path) {
     const DWORD attrs = GetFileAttributesW(path.c_str());
     return attrs != INVALID_FILE_ATTRIBUTES &&
@@ -446,5 +459,98 @@ bool InstallFfmpeg(HttpClient& client,
     RunToolCapture(L"cmd.exe", L"/c rmdir /s /q " + Quote(unpackDir), 60000,
                    ignored, ignoredCode);
     AppendLog(L"ffmpeg installed at " + destination);
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// yt-dlp installer (single exe, no archive)
+// ---------------------------------------------------------------------------
+
+bool InstallYtDlp(HttpClient& client,
+                  const std::function<void(uint64_t, uint64_t)>& progress,
+                  const std::atomic<bool>& cancel, std::wstring& error) {
+    const std::wstring toolDir = ToolDir();
+    const std::wstring target = toolDir + L"\\yt-dlp.exe";
+    // Download to a temporary name: FindYtDlp() looks for yt-dlp.exe in this
+    // very folder, so a half-written file must never appear under that name.
+    const std::wstring tempPath = toolDir + L"\\yt-dlp-download.exe";
+    DeleteFileQuiet(tempPath);
+
+    RequestOptions head;
+    head.method = L"HEAD";
+    const std::wstring ytDlpUrl = YtDlpUrl();
+    const HttpResponse probe =
+        client.Request(ytDlpUrl, head, HttpClient::BodySink());
+    const uint64_t total = probe.ok ? probe.contentLength : UINT64_MAX;
+
+    HANDLE file = CreateFileW(tempPath.c_str(), GENERIC_WRITE, 0, nullptr,
+                              CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) {
+        error = L"Cannot create the yt-dlp download";
+        return false;
+    }
+
+    uint64_t written = 0;
+    bool writeOk = true;
+    RequestOptions get;
+    const HttpResponse response = client.Request(
+        ytDlpUrl, get, [&](int, const uint8_t* data, size_t len) -> bool {
+            if (cancel.load()) return false;
+            DWORD wrote = 0;
+            if (!WriteFile(file, data, (DWORD)len, &wrote, nullptr) ||
+                wrote != len) {
+                writeOk = false;
+                return false;
+            }
+            written += wrote;
+            if (progress) progress(written, total == UINT64_MAX ? 0 : total);
+            return true;
+        });
+    CloseHandle(file);
+
+    if (!writeOk || response.statusCode != 200 ||
+        written < 5ull * 1024ull * 1024ull) {
+        AppendLog(L"yt-dlp download failed: status " +
+                  std::to_wstring(response.statusCode) + L", bytes " +
+                  std::to_wstring(written));
+        DeleteFileQuiet(tempPath);
+        error = cancel.load() ? L"Stopped" : L"Cannot download yt-dlp";
+        return false;
+    }
+
+    if (progress) progress(0, 0);
+
+    // A real yt-dlp.exe is a Windows PE; a GitHub error page or a captive
+    // portal would come back as HTML. Refuse anything that is not an exe.
+    HANDLE check = CreateFileW(tempPath.c_str(), GENERIC_READ,
+                               FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                               FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (check == INVALID_HANDLE_VALUE) {
+        error = L"Cannot verify the yt-dlp download";
+        DeleteFileQuiet(tempPath);
+        return false;
+    }
+    char header[2] = {};
+    DWORD read = 0;
+    const bool headerOk =
+        ReadFile(check, header, sizeof(header), &read, nullptr) &&
+        read == sizeof(header) && header[0] == 'M' && header[1] == 'Z';
+    CloseHandle(check);
+    if (!headerOk) {
+        AppendLog(L"yt-dlp download is not a Windows executable");
+        DeleteFileQuiet(tempPath);
+        error = L"The yt-dlp download is not a valid executable";
+        return false;
+    }
+
+    DeleteFileQuiet(target);
+    if (!MoveFileW(tempPath.c_str(), target.c_str())) {
+        error = L"Cannot install yt-dlp.exe: " +
+                GetErrorMessage(GetLastError());
+        DeleteFileQuiet(tempPath);
+        return false;
+    }
+
+    AppendLog(L"yt-dlp installed at " + target);
     return true;
 }

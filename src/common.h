@@ -36,7 +36,7 @@
 // ---------------------------------------------------------------------------
 #define APP_NAME        L"Spider Download Manager"
 #define APP_SHORT       L"SpiderDownloadManager"
-#define APP_VERSION     L"1.1"
+#define APP_VERSION     L"1.2"
 #define APP_CLASS       L"SpiderDownloadManagerMainWnd"
 #define APP_REG_ROOT    L"Software\\SpiderDownloadManager"
 

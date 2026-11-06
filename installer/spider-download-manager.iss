@@ -10,7 +10,7 @@
 ; Paths are relative to this script's folder (installer/).
 
 #define AppName "Spider Download Manager"
-#define AppVersion "1.1"
+#define AppVersion "1.2"
 #define AppExe "Spider Download Manager.exe"
 
 [Setup]
@@ -42,6 +42,10 @@ Name: "startup"; Description: "Start with Windows (minimized in the notification
 [Files]
 ; The app and its Qt runtime (dist/ is produced by windeployqt in CI).
 Source: "..\dist\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; yt-dlp.exe (v1.2): bundled so a fresh install can fetch video qualities
+; immediately. The app also auto-downloads it on first use (see
+; InstallYtDlp), so an older install heals itself the same way.
+Source: "..\tools\yt-dlp.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; The browser extension, so the app can offer a one-click install helper.
 Source: "..\browser-extension\*"; DestDir: "{app}\extension"; Flags: ignoreversion recursesubdirs createallsubdirs
 
