@@ -38,10 +38,9 @@ find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network)
 
 # The GUI application. qt_add_executable links Qt6::EntryPoint, which
 # provides the WinMain entry point for the int main() in src/main.cpp.
-# resources.qrc is compiled by AUTORCC; app.rc (icon + version info) is
-# compiled by the MSVC resource compiler. There is no flextest harness
-# target: its source (tests/engine_test.cpp) is not in the repo.
-qt_add_executable(SpiderDownloadManager
+# WIN32 marks it a GUI (WINDOWS-subsystem) exe so Windows does NOT open
+# a console/cmd window next to the app.
+qt_add_executable(SpiderDownloadManager WIN32
     src/main.cpp
     src/bridge.cpp
     src/common.cpp
