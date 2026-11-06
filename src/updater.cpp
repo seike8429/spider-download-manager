@@ -73,7 +73,7 @@ void Updater::onCheckFinished(QNetworkReply* reply) {
     if (reply->error() != QNetworkReply::NoError) {
         if (!silent_) {
             QMessageBox::information(
-                window_, AppTitle(),
+                window_, QString::fromWCharArray(APP_NAME),
                 tr("Could not check for updates. Please check your "
                    "internet connection and try again."));
         }
@@ -84,7 +84,7 @@ void Updater::onCheckFinished(QNetworkReply* reply) {
         QJsonDocument::fromJson(reply->readAll());
     if (!document.isObject()) {
         if (!silent_) {
-            QMessageBox::information(window_, AppTitle(),
+            QMessageBox::information(window_, QString::fromWCharArray(APP_NAME),
                                      tr("Could not check for updates."));
         }
         return;
@@ -96,7 +96,7 @@ void Updater::onCheckFinished(QNetworkReply* reply) {
         !IsNewer(QString::fromWCharArray(APP_VERSION), tag)) {
         if (!silent_) {
             QMessageBox::information(
-                window_, AppTitle(),
+                window_, QString::fromWCharArray(APP_NAME),
                 tr("You are using the latest version."));
         }
         return;
@@ -118,7 +118,7 @@ void Updater::onCheckFinished(QNetworkReply* reply) {
     if (downloadUrl.isEmpty()) {
         if (!silent_) {
             QMessageBox::information(
-                window_, AppTitle(),
+                window_, QString::fromWCharArray(APP_NAME),
                 tr("A new version (%1) is available, but no installer "
                    "was found for it.")
                     .arg(tag));
@@ -132,7 +132,7 @@ void Updater::onCheckFinished(QNetworkReply* reply) {
 void Updater::offerUpdate(const QString& version,
                           const QString& downloadUrl) {
     const QMessageBox::StandardButton answer = QMessageBox::question(
-        window_, AppTitle(),
+        window_, QString::fromWCharArray(APP_NAME),
         tr("Spider Download Manager %1 is available. "
            "Download and install it now?")
             .arg(version),
@@ -143,7 +143,8 @@ void Updater::offerUpdate(const QString& version,
 
 void Updater::downloadAndInstall(const QString& downloadUrl) {
     pendingDownloadUrl_ = downloadUrl;
-    QNetworkRequest request(QUrl(downloadUrl));
+    QUrl url(downloadUrl);
+    QNetworkRequest request(url);
     request.setRawHeader("User-Agent", "SpiderDownloadManager-updater");
     QNetworkReply* reply = manager_->get(request);
     connect(reply, &QNetworkReply::finished, this,
@@ -154,7 +155,7 @@ void Updater::onDownloadFinished(QNetworkReply* reply) {
     reply->deleteLater();
     if (reply->error() != QNetworkReply::NoError) {
         QMessageBox::information(
-            window_, AppTitle(),
+            window_, QString::fromWCharArray(APP_NAME),
             tr("The update could not be downloaded. Please try again "
                "later."));
         return;
@@ -169,7 +170,7 @@ void Updater::onDownloadFinished(QNetworkReply* reply) {
     QFile file(path);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         QMessageBox::information(
-            window_, AppTitle(),
+            window_, QString::fromWCharArray(APP_NAME),
             tr("The update could not be saved. Please try again later."));
         return;
     }
@@ -180,7 +181,7 @@ void Updater::onDownloadFinished(QNetworkReply* reply) {
     // QProcess::startDetached keeps the installer alive after we exit.
     if (!QProcess::startDetached(path, QStringList())) {
         QMessageBox::information(
-            window_, AppTitle(),
+            window_, QString::fromWCharArray(APP_NAME),
             tr("The update was downloaded to %1. Please run it to "
                "install.")
                 .arg(path));
