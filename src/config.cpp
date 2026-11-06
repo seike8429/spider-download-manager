@@ -278,6 +278,8 @@ void Config::Load() {
     clipboardAutoDownload =
         ReadInt(key, L"ClipboardAutoDownload",
                 clipboardAutoDownload ? 1 : 0) != 0;
+    autoCheckUpdates =
+        ReadInt(key, L"AutoCheckUpdates", autoCheckUpdates ? 1 : 0) != 0;
     showCompleteDialog =
         ReadInt(key, L"ShowCompleteDialog", showCompleteDialog ? 1 : 0) != 0;
     showProgressDialog =
@@ -334,6 +336,7 @@ void Config::Save() const {
     WriteInt(key, L"CaptureOpera", captureOpera ? 1 : 0);
     WriteInt(key, L"CaptureBrave", captureBrave ? 1 : 0);
     WriteInt(key, L"ClipboardAutoDownload", clipboardAutoDownload ? 1 : 0);
+    WriteInt(key, L"AutoCheckUpdates", autoCheckUpdates ? 1 : 0);
     WriteInt(key, L"ShowCompleteDialog", showCompleteDialog ? 1 : 0);
     WriteInt(key, L"ShowProgressDialog", showProgressDialog ? 1 : 0);
     WriteInt(key, L"ProgressShowDetails", progressShowDetails ? 1 : 0);

@@ -36,7 +36,7 @@
 // ---------------------------------------------------------------------------
 #define APP_NAME        L"Spider Download Manager"
 #define APP_SHORT       L"SpiderDownloadManager"
-#define APP_VERSION     L"1.0"
+#define APP_VERSION     L"1.1"
 #define APP_CLASS       L"SpiderDownloadManagerMainWnd"
 #define APP_REG_ROOT    L"Software\\SpiderDownloadManager"
 
@@ -135,6 +135,7 @@ struct Config {
     bool captureOpera = true;
     bool captureBrave = true;
     bool clipboardAutoDownload = false;  // IDM-style: auto-download copied URLs
+    bool autoCheckUpdates = true;        // Check GitHub Releases at startup
     std::wstring userAgent;
     std::wstring saveDir;
     std::wstring tempDir;

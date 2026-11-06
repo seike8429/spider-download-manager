@@ -50,6 +50,7 @@ qt_add_executable(SpiderDownloadManager WIN32
     src/localization.cpp
     src/ui_dialogs.cpp
     src/ui_main.cpp
+    src/updater.cpp
     src/url.cpp
     src/ytdlp.cpp
     src/resources.qrc

@@ -1,6 +1,7 @@
 #include "ui_qt.h"
 #include "bridge.h"
 #include "localization.h"
+#include "updater.h"
 
 #include <QAction>
 #include <QActionGroup>
@@ -811,6 +812,12 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             Tr("Chrome bridge could not start: %1").arg(bridgeError), 10000);
     }
 
+    // Automatic update check (silent: only speaks up when an update exists).
+    updater_ = std::make_unique<Updater>(this, this);
+    if (DownloadManager::Instance().Settings().autoCheckUpdates) {
+        updater_->check(true);
+    }
+
     auto* timer = new QTimer(this);
     timer->setInterval(300);
     connect(timer, &QTimer::timeout, this, [this] { refresh(false); });
@@ -994,6 +1001,11 @@ void MainWindow::buildActions() {
     actHelp_ = new QAction(QStringLiteral("Help..."), this);
     actHelp_->setShortcut(QKeySequence::HelpContents);
     connect(actHelp_, &QAction::triggered, this, [this] { showHelp(); });
+
+    actCheckUpdates_ = new QAction(QStringLiteral("Check for updates"), this);
+    connect(actCheckUpdates_, &QAction::triggered, this, [this] {
+        if (updater_) updater_->check(false);
+    });
 
     actAbout_ = new QAction(QStringLiteral("About..."), this);
     connect(actAbout_, &QAction::triggered, this,
@@ -1248,6 +1260,7 @@ void MainWindow::buildMenus() {
 
     QMenu* help = addBarMenu(menuBar(), "&Help");
     help->addAction(actHelp_);
+    help->addAction(actCheckUpdates_);
     help->addAction(actAbout_);
 
     QMenu* registration = addBarMenu(menuBar(), "&Registration");

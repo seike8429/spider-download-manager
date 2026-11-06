@@ -29,6 +29,7 @@ class QToolBar;
 class QTreeWidget;
 class QWidget;
 class ChromeBridge;
+class Updater;
 
 enum class UiLanguage;
 
@@ -160,6 +161,7 @@ private:
     QAction* actViewStatus_ = nullptr;
     QAction* actViewCategories_ = nullptr;
     QAction* actHelp_ = nullptr;
+    QAction* actCheckUpdates_ = nullptr;
     QAction* actAbout_ = nullptr;
     QAction* actRegister_ = nullptr;
     QAction* actRegistrationInfo_ = nullptr;
@@ -171,6 +173,7 @@ private:
     int findRow_ = -1;
     SortMode sort_ = SortMode::AdditionOrder;
     std::unique_ptr<ChromeBridge> bridge_;
+    std::unique_ptr<Updater> updater_;
     std::deque<ChromeDownloadRequest> chromeQueue_;
     QString lastAutoClipboardUrl_;
     std::deque<std::shared_ptr<DownloadItem>> completeQueue_;

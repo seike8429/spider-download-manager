@@ -11,6 +11,7 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDir>
+#include <QFile>
 #include <QFileDialog>
 #include <QFileIconProvider>
 #include <QFileInfo>
@@ -447,6 +448,10 @@ public:
         startupHint->setStyleSheet(QStringLiteral("color:#96a0ae;"));
         startupHint->setWordWrap(true);
         startupLayout->addWidget(startupHint);
+        autoCheckUpdates_ = new QCheckBox(
+            Tr("Automatically check for updates"), startup);
+        autoCheckUpdates_->setChecked(cfg.autoCheckUpdates);
+        startupLayout->addWidget(autoCheckUpdates_);
         root->addWidget(startup);
 
         // IDM-style browser integration: which browsers the extension may
@@ -489,6 +494,32 @@ public:
         browsersHint->setStyleSheet(QStringLiteral("color:#96a0ae;"));
         browsersHint->setWordWrap(true);
         browsersLayout->addWidget(browsersHint);
+        auto* installExt = new QPushButton(
+            Tr("Install browser extension..."), browsers);
+        connect(installExt, &QPushButton::clicked, this, [this] {
+            // The installer puts the extension next to the exe. Opening
+            // the folder lets the user drag it onto the browser's
+            // extensions page (Developer mode on) to load it unpacked.
+            const QString extDir =
+                QString::fromStdWString(GetExeDir()) +
+                QStringLiteral("\\extension");
+            if (!QFile::exists(extDir + QStringLiteral("/manifest.json"))) {
+                QMessageBox::information(
+                    this, AppTitle(),
+                    Tr("The browser extension ships with the installer. "
+                       "Please install Spider Download Manager with "
+                       "Setup.exe, then use this button again."));
+                return;
+            }
+            QDesktopServices::openUrl(
+                QUrl::fromLocalFile(extDir));
+            QMessageBox::information(
+                this, AppTitle(),
+                Tr("Drag the extension folder onto your browser's "
+                   "extensions page (edge://extensions or "
+                   "chrome://extensions, Developer mode on) to load it."));
+        });
+        browsersLayout->addWidget(installExt);
         root->addWidget(browsers);
 
         auto* info = new QLabel(
@@ -536,6 +567,7 @@ public:
         cfg_.showCompleteDialog = showComplete_->isChecked();
         cfg_.showProgressDialog = showProgress_->isChecked();
         cfg_.startWithWindows = startWithWindows_->isChecked();
+        cfg_.autoCheckUpdates = autoCheckUpdates_->isChecked();
         cfg_.captureChrome = captureChrome_->isChecked();
         cfg_.captureEdge = captureEdge_->isChecked();
         cfg_.captureOpera = captureOpera_->isChecked();
@@ -567,6 +599,7 @@ private:
     QCheckBox* showComplete_ = nullptr;
     QCheckBox* showProgress_ = nullptr;
     QCheckBox* startWithWindows_ = nullptr;
+    QCheckBox* autoCheckUpdates_ = nullptr;
     QCheckBox* captureChrome_ = nullptr;
     QCheckBox* captureEdge_ = nullptr;
     QCheckBox* captureOpera_ = nullptr;
