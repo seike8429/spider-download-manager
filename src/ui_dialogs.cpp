@@ -2035,7 +2035,9 @@ public:
         header->addWidget(logo);
 
         auto* title = new QLabel(this);
-        title->setText(QStringLiteral("<span style='font-size:12.5pt; font-weight:bold; color:#ffffff;'>Spider Download Manager 1.0</span>"));
+        title->setText(QStringLiteral("<span style='font-size:12.5pt; font-weight:bold; color:#ffffff;'>Spider Download Manager ") +
+                       QString::fromWCharArray(APP_VERSION) +
+                       QStringLiteral("</span>"));
         header->addWidget(title, 1);
         root->addLayout(header);
 
