@@ -1,0 +1,79 @@
+# Build Spider Download Manager (Windows x64, Qt 6 + MSVC + CMake).
+#
+# HOW TO INSTALL (the GitHub API token cannot write .github/ files):
+#   1. In the repo, go to Actions -> New workflow -> "set up a workflow
+#      yourself" (or Add file -> Create new file).
+#   2. Create the file .github/workflows/build.yml with exactly this content.
+#   3. Commit it to main. The build runs automatically on every push to main
+#      (and can be re-run from Actions -> Build Spider Download Manager ->
+#      Run workflow).
+#
+# WHAT IT EXPECTS:
+#   - Qt 6.8.3, arch win64_msvc2022_64 (the version upstream tested with).
+#     Installed by jurplel/install-qt-action; its bin dir is on PATH, so
+#     `windeployqt` resolves without a full path.
+#   - MSVC 2022 (ilammy/msvc-dev-cmd, vsversion 2022) to match the Qt arch.
+#   - CMake target "SpiderDownloadManager" (see CMakeLists.txt), whose output
+#     exe is named "Spider Download Manager.exe".
+#   - Ninja (preinstalled on windows-latest runners).
+#
+# WHAT IT PRODUCES:
+#   - Artifact "SpiderDownloadManager-windows-x64": a clean dist/ folder
+#     containing "Spider Download Manager.exe" plus the Qt DLLs, the
+#     platforms/qwindows.dll plugin and the MSVC runtime (via windeployqt
+#     --compiler-runtime). The folder is self-contained: copy it to a Windows
+#     PC and run the exe, no Qt install needed.
+name: Build Spider Download Manager
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up MSVC 2022
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          vsversion: '2022'
+          arch: x64
+
+      - name: Install Qt 6.8.3 (MSVC 2022, 64-bit)
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          cache: true
+
+      - name: Configure (CMake + Ninja, Release)
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Deploy Qt runtime next to the exe
+        run: windeployqt --release --compiler-runtime "build\Spider Download Manager.exe"
+
+      - name: Package a clean dist folder
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item "build\Spider Download Manager.exe" dist\
+          Copy-Item build\*.dll dist\ -ErrorAction SilentlyContinue
+          Get-ChildItem build -Directory |
+            Where-Object { $_.Name -ne 'CMakeFiles' } |
+            ForEach-Object { Copy-Item $_.FullName dist\ -Recurse }
+          Get-ChildItem dist -Recurse | Select-Object FullName
+
+      - name: Upload Spider Download Manager
+        uses: actions/upload-artifact@v4
+        with:
+          name: SpiderDownloadManager-windows-x64
+          path: dist/
